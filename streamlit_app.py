@@ -28,12 +28,17 @@ def get_transcript(video_id, languages):
     except NoTranscriptFound:
         try:
             transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Check if supported language is present
+            available_languages = [t.language_code for t in transcripts]
+            if not any(lang in available_languages for lang in ['ja', 'en']):
+                st.error("⚠️ This video doesn't have subtitles in Japanese or English. Please try another video.")
+                return None
             return transcripts.find_transcript(languages).fetch()
         except Exception as e:
             st.error(f"Transcript error: {e}")
             return None
     except TranscriptsDisabled:
-        st.warning("Subtitles are disabled for this video.")
+        st.warning("⚠️ Subtitles are disabled for this video.")
         return None
     except Exception as e:
         st.error(f"Unexpected error: {e}")
@@ -51,12 +56,11 @@ def save_to_docx(text, filename):
 
 def get_video_title(video_id):
     try:
-        api_url = f"https://www.youtube.com/watch?v={video_id}"
-        response = requests.get(api_url)
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        response = requests.get(url)
         match = re.search(r'<title>(.*?)</title>', response.text)
         if match:
             title = match.group(1).replace("- YouTube", "").strip()
-            # Remove illegal filename characters
             title = re.sub(r'[\\/*?:"<>|]', "_", title)
             return title
         return video_id
@@ -66,7 +70,7 @@ def get_video_title(video_id):
 def main():
     st.set_page_config(page_title="YouTube Transcript to DOCX", page_icon="📄")
     st.title("📄 YouTube Transcript to Word Doc")
-    st.write("Enter a YouTube video URL, choose your subtitle language, and get a downloadable Word file.")
+    st.write("Enter a YouTube video URL, choose your subtitle language, and download a transcript.")
 
     video_url = st.text_input("🎥 YouTube Video URL")
 
@@ -75,7 +79,7 @@ def main():
 
     if st.button("Generate Transcript"):
         if not video_url.strip():
-            st.error("Please enter a valid YouTube video URL.")
+            st.error("❌ Please enter a valid YouTube video URL.")
             return
 
         try:
@@ -85,7 +89,7 @@ def main():
 
             if transcript:
                 formatted = format_transcript(transcript)
-                filename = f"{video_title}_transcript.docx"
+                filename = f"{video_title}_transcription.docx"
                 save_to_docx(formatted, filename)
 
                 st.success("✅ Transcript generated successfully!")
