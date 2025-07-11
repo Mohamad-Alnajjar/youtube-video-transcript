@@ -2,3 +2,4 @@ streamlit
 youtube_transcript_api
 python-docx
 srt
+streamlit
