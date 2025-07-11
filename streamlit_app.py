@@ -28,20 +28,23 @@ def get_transcript(video_id, languages):
     except NoTranscriptFound:
         try:
             transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-            # Check if supported language is present
             available_languages = [t.language_code for t in transcripts]
+
             if not any(lang in available_languages for lang in ['ja', 'en']):
-                st.error("⚠️ This video doesn't have subtitles in Japanese or English. Please try another video.")
+                st.error("❌ This video doesn't have Japanese or English subtitles. Please try another video.")
                 return None
-            return transcripts.find_transcript(languages).fetch()
-        except Exception as e:
-            st.error(f"Transcript error: {e}")
+
+            # If language is there but not downloadable
+            st.error("❌ The requested subtitles are not downloadable. Please try another language or video.")
+            return None
+        except:
+            st.error("❌ Subtitles could not be retrieved. Please try another video.")
             return None
     except TranscriptsDisabled:
         st.warning("⚠️ Subtitles are disabled for this video.")
         return None
-    except Exception as e:
-        st.error(f"Unexpected error: {e}")
+    except Exception:
+        st.error("❌ Something went wrong while retrieving the subtitles.")
         return None
 
 def format_transcript(transcript_data):
