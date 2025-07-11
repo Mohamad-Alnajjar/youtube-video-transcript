@@ -1,14 +1,3 @@
-# This script takes a YouTube video URL, extracts the transcript, formats it,
-# and saves it as a two-column .docx file.
-
-# To use this script:
-# 1. Run the cell.
-# 2. When prompted, enter the YouTube video URL.
-# 3. The script will attempt to retrieve the transcript in Japanese ('ja').
-# 4. If successful, the formatted transcript will be saved as 'formatted_transcript.docx'
-#    in the same directory as the notebook.
-# streamlit_app.py
-
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 from urllib.parse import urlparse, parse_qs
@@ -20,19 +9,30 @@ def extract_video_id(video_url):
     Extracts the YouTube video ID from the full URL.
     """
     try:
-        if "youtube.com" in video_url or "youtu.be" in video_url:
-            parsed_url = urlparse(video_url)
+        parsed_url = urlparse(video_url)
+        if "youtube.com" in parsed_url.netloc:
+            # Standard YouTube URL, get 'v' param
             video_id = parse_qs(parsed_url.query).get('v')
-            if not video_id:
-                video_id = parsed_url.path.split('/')[-1]
-                if not video_id:
-                    raise ValueError("Invalid YouTube URL.")
+            if video_id:
+                return video_id[0]
+            # Sometimes the video ID is in the path, like /embed/VIDEOID
+            path_parts = parsed_url.path.split('/')
+            if len(path_parts) >= 2 and path_parts[1] == "embed":
+                return path_parts[2]
+            raise ValueError("Invalid YouTube URL: video ID not found.")
+        elif "youtu.be" in parsed_url.netloc:
+            # Short URL, video ID is path part
+            video_id = parsed_url.path.lstrip('/')
+            if video_id:
                 return video_id
-            return video_id[0]
+            raise ValueError("Invalid YouTube URL: video ID not found.")
         else:
-            return video_url
-    except Exception:
-        raise ValueError("Invalid YouTube URL.")
+            # If input looks like a video id already, return as is
+            if len(video_url) == 11:
+                return video_url
+            raise ValueError("Invalid YouTube URL.")
+    except Exception as e:
+        raise ValueError(f"Invalid YouTube URL: {e}")
 
 def get_transcript(video_id, languages=['ja', 'en']):
     """
@@ -56,24 +56,35 @@ def get_transcript(video_id, languages=['ja', 'en']):
 
 def format_transcript(transcript_data):
     """
-    Converts transcript list into clean text format.
+    Converts transcript list into clean text format with timestamps.
     """
-    return "\n\n".join([f"- {entry['text']}" for entry in transcript_data])
+    lines = []
+    for entry in transcript_data:
+        start = entry['start']
+        text = entry['text']
+        lines.append(f"[{start:.2f}s] {text}")
+    return "\n\n".join(lines)
 
 def save_to_docx(text, filename):
     """
-    Saves the text into a 2-column Word document.
+    Saves the text into a Word document.
     """
     document = Document()
     section = document.sections[0]
-    section._sectPr.xpath('./w:cols')[0].set('num', '2')  # Two columns
-    document.add_paragraph(text)
+    # Commented out to avoid possible errors:
+    # section._sectPr.xpath('./w:cols')[0].set('num', '2')  # Two columns
+    # Add each paragraph separately for better formatting
+    for paragraph in text.split("\n\n"):
+        document.add_paragraph(paragraph)
     document.save(filename)
 
 def main():
     st.set_page_config(page_title="YouTube Transcript to DOCX", page_icon="📄")
     st.title("📄 YouTube Transcript to Word Doc")
     st.write("Enter a YouTube video URL. The app will extract subtitles (Japanese preferred), format them, and give you a downloadable Word file.")
+    
+    # Debug message to confirm app runs
+    st.write("App started — waiting for input.")
 
     video_url = st.text_input("🎥 YouTube Video URL")
 
@@ -105,5 +116,5 @@ def main():
         except ValueError as e:
             st.error(str(e))
 
-if __name__ == "__main__":
-    main()
+# Call main directly to ensure Streamlit runs it
+main()
