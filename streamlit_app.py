@@ -6,37 +6,28 @@ import os
 
 def extract_video_id(video_url):
     """
-    Extracts the YouTube video ID from the full URL.
+    Extract the YouTube video ID from the given URL.
     """
     try:
         parsed_url = urlparse(video_url)
         if "youtube.com" in parsed_url.netloc:
-            # Standard YouTube URL, get 'v' param
             video_id = parse_qs(parsed_url.query).get('v')
             if video_id:
                 return video_id[0]
-            # Sometimes the video ID is in the path, like /embed/VIDEOID
             path_parts = parsed_url.path.split('/')
             if len(path_parts) >= 2 and path_parts[1] == "embed":
                 return path_parts[2]
-            raise ValueError("Invalid YouTube URL: video ID not found.")
         elif "youtu.be" in parsed_url.netloc:
-            # Short URL, video ID is path part
-            video_id = parsed_url.path.lstrip('/')
-            if video_id:
-                return video_id
-            raise ValueError("Invalid YouTube URL: video ID not found.")
-        else:
-            # If input looks like a video id already, return as is
-            if len(video_url) == 11:
-                return video_url
-            raise ValueError("Invalid YouTube URL.")
+            return parsed_url.path.lstrip('/')
+        elif len(video_url) == 11:
+            return video_url
+        raise ValueError("Invalid YouTube URL or video ID format.")
     except Exception as e:
         raise ValueError(f"Invalid YouTube URL: {e}")
 
 def get_transcript(video_id, languages=['ja', 'en']):
     """
-    Fetches transcript from YouTube.
+    Get the transcript using YouTubeTranscriptApi in the given languages.
     """
     try:
         return YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
@@ -56,7 +47,7 @@ def get_transcript(video_id, languages=['ja', 'en']):
 
 def format_transcript(transcript_data):
     """
-    Converts transcript list into clean text format with timestamps.
+    Convert transcript data to a readable string with timestamps.
     """
     lines = []
     for entry in transcript_data:
@@ -67,26 +58,24 @@ def format_transcript(transcript_data):
 
 def save_to_docx(text, filename):
     """
-    Saves the text into a Word document.
+    Save the transcript text to a Word document.
     """
     document = Document()
     section = document.sections[0]
-    # Commented out to avoid possible errors:
-    # section._sectPr.xpath('./w:cols')[0].set('num', '2')  # Two columns
-    # Add each paragraph separately for better formatting
+    # Optional: make 2-column layout (may not work in all environments)
+    # from docx.oxml.ns import qn
+    # section._sectPr.xpath('./w:cols')[0].set('num', '2')
     for paragraph in text.split("\n\n"):
         document.add_paragraph(paragraph)
     document.save(filename)
 
+# Main Streamlit app
 def main():
-    st.set_page_config(page_title="YouTube Transcript to DOCX", page_icon="📄")
-    st.title("📄 YouTube Transcript to Word Doc")
-    st.write("Enter a YouTube video URL. The app will extract subtitles (Japanese preferred), format them, and give you a downloadable Word file.")
-    
-    # Debug message to confirm app runs
-    st.write("App started — waiting for input.")
+    st.set_page_config(page_title="YouTube Transcript to Word", page_icon="📄")
+    st.title("📄 YouTube Transcript to Word Document")
+    st.write("Paste a YouTube video URL. The app will extract subtitles (Japanese preferred), format them, and let you download a Word (.docx) file.")
 
-    video_url = st.text_input("🎥 YouTube Video URL")
+    video_url = st.text_input("🎥 Enter YouTube Video URL")
 
     if st.button("Generate Transcript"):
         if not video_url.strip():
@@ -105,7 +94,7 @@ def main():
                 with open(filename, "rb") as file:
                     st.success("✅ Transcript generated successfully!")
                     st.download_button(
-                        label="📥 Download .docx File",
+                        label="📥 Download Word File",
                         data=file,
                         file_name=filename,
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -116,5 +105,5 @@ def main():
         except ValueError as e:
             st.error(str(e))
 
-# Call main directly to ensure Streamlit runs it
+# Always call main() directly
 main()
