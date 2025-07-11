@@ -7,107 +7,103 @@
 # 3. The script will attempt to retrieve the transcript in Japanese ('ja').
 # 4. If successful, the formatted transcript will be saved as 'formatted_transcript.docx'
 #    in the same directory as the notebook.
+# streamlit_app.py
 
+import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 from urllib.parse import urlparse, parse_qs
-import srt
 from docx import Document
-from docx.shared import Inches
-from docx.enum.section import WD_SECTION
 import os
 
-def get_transcript_from_youtube(video_url, languages=['en']):
+def extract_video_id(video_url):
     """
-    Extracts the transcript of a YouTube video in specified languages.
-
-    Args:
-        video_url: The URL or ID of the YouTube video.
-        languages: A list of preferred language codes (e.g., ['en', 'ja']).
-
-    Returns:
-        A list of dictionaries representing the transcript, or None if no transcript
-        is found or transcripts are disabled.
-
-    Raises:
-        ValueError: If an invalid YouTube URL is provided and the video ID cannot be extracted.
+    Extracts the YouTube video ID from the full URL.
     """
-    if "youtube.com" in video_url or "youtu.be" in video_url:
-        parsed_url = urlparse(video_url)
-        video_id = parse_qs(parsed_url.query).get('v')
-        if not video_id:
-            video_id = parsed_url.path.split('/')[-1]
-            if not video_id:
-                raise ValueError("Invalid YouTube URL provided.")
-        else:
-            video_id = video_id[0]
-    else:
-        video_id = video_url
-
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
-        return transcript
+        if "youtube.com" in video_url or "youtu.be" in video_url:
+            parsed_url = urlparse(video_url)
+            video_id = parse_qs(parsed_url.query).get('v')
+            if not video_id:
+                video_id = parsed_url.path.split('/')[-1]
+                if not video_id:
+                    raise ValueError("Invalid YouTube URL.")
+                return video_id
+            return video_id[0]
+        else:
+            return video_url
+    except Exception:
+        raise ValueError("Invalid YouTube URL.")
+
+def get_transcript(video_id, languages=['ja', 'en']):
+    """
+    Fetches transcript from YouTube.
+    """
+    try:
+        return YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
     except NoTranscriptFound:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = transcript_list.find_transcript(languages).fetch()
-            return transcript
+            transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+            return transcripts.find_transcript(languages).fetch()
         except Exception as e:
-            print(f"Transcript not found or error: {e}")
+            st.error(f"Transcript error: {e}")
             return None
     except TranscriptsDisabled:
-        print("Subtitles are disabled for this video.")
+        st.warning("Subtitles are disabled for this video.")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        st.error(f"Unexpected error: {e}")
         return None
 
-
-def process_transcript_data(transcript_data):
+def format_transcript(transcript_data):
     """
-    Formats raw transcript data into a single string with hyphens and line breaks.
-
-    Args:
-        transcript_data: A list of dictionaries representing the transcript.
-
-    Returns:
-        A formatted string of the transcript text.
+    Converts transcript list into clean text format.
     """
-    formatted_text = ""
-    if transcript_data:
-        for entry in transcript_data:
-            formatted_text += "- " + entry['text'] + "\n\n"
-    return formatted_text
+    return "\n\n".join([f"- {entry['text']}" for entry in transcript_data])
 
-
-def save_dialogue_to_docx(formatted_text, filename):
+def save_to_docx(text, filename):
     """
-    Saves formatted text to a .docx file with a two-column layout.
-
-    Args:
-        formatted_text: The text content to save.
-        filename: The name of the output .docx file.
+    Saves the text into a 2-column Word document.
     """
     document = Document()
-
-    # Add a section with two columns
-
-    # Add the formatted dialogue to the document
-    document.add_paragraph(formatted_text.strip())
-
+    section = document.sections[0]
+    section._sectPr.xpath('./w:cols')[0].set('num', '2')  # Two columns
+    document.add_paragraph(text)
     document.save(filename)
 
-    print(f"Formatted dialogue saved as {filename}")
+def main():
+    st.set_page_config(page_title="YouTube Transcript to DOCX", page_icon="📄")
+    st.title("📄 YouTube Transcript to Word Doc")
+    st.write("Enter a YouTube video URL. The app will extract subtitles (Japanese preferred), format them, and give you a downloadable Word file.")
 
-# Main script execution
-video_url = input("Enter the YouTube video URL: ")
+    video_url = st.text_input("🎥 YouTube Video URL")
 
-# Specify Japanese language ('ja') as it was shown to be available in previous steps
-transcript_data = get_transcript_from_youtube(video_url, languages=['ja'])
+    if st.button("Generate Transcript"):
+        if not video_url.strip():
+            st.error("Please enter a valid YouTube video URL.")
+            return
 
-if transcript_data:
-    formatted_dialogue = process_transcript_data(transcript_data)
-    output_filename = 'formatted_transcript.docx'
-    save_dialogue_to_docx(formatted_dialogue, output_filename)
-    print(f"The formatted transcript has been saved to {output_filename}")
-else:
-    print("Could not retrieve transcript for the provided URL in Japanese.")
+        try:
+            video_id = extract_video_id(video_url)
+            transcript = get_transcript(video_id, ['ja', 'en'])
+
+            if transcript:
+                formatted_text = format_transcript(transcript)
+                filename = f"{video_id}_transcript.docx"
+                save_to_docx(formatted_text, filename)
+
+                with open(filename, "rb") as file:
+                    st.success("✅ Transcript generated successfully!")
+                    st.download_button(
+                        label="📥 Download .docx File",
+                        data=file,
+                        file_name=filename,
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                os.remove(filename)
+            else:
+                st.warning("Transcript not available in Japanese or English.")
+        except ValueError as e:
+            st.error(str(e))
+
+if __name__ == "__main__":
+    main()
