@@ -1,0 +1,5 @@
+streamlit
+anthropic
+youtube-transcript-api
+python-docx
+reportlab
